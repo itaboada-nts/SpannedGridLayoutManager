@@ -25,9 +25,6 @@ afterEvaluate {
 }
 
 ext {
-    bintrayRepo = 'maven'
-    bintrayName = 'spannedgridlayoutmanager'
-
     publishedGroupId = 'com.arasthel'
     libraryName = 'SpannedGridLayoutManager'
     artifact = 'spannedgridlayoutmanager'
@@ -74,7 +71,3 @@ dependencies {
     implementation "com.android.support:recyclerview-v7:$support_library_version"
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
 }
-
-// Bintray Upload
-apply from: '../gradle/tools/bintrayv1.gradle'
-apply from: '../gradle/tools/installv1.gradle'
