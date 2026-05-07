@@ -356,19 +356,37 @@ open class SpannedGridLayoutManager(val orientation: Orientation,
     }
 
     /**
-     * A new view was added, update layout edges if needed
+     * A new view was added, update layout edges if needed.
+     * Uses the actual rect height from childFrames to account for dynamic span heights (-1).
      */
     protected open fun updateEdgesWithNewChild(view: View) {
-        val childStart = getChildStart(view) + scroll + getPaddingStartForOrientation()
-
-        if (childStart < layoutStart) {
-            layoutStart = childStart
-        }
-
-        val newLayoutEnd = childStart + rectsHelper.itemSize
-
-        if (newLayoutEnd > layoutEnd) {
-            layoutEnd = newLayoutEnd
+        val position = getPosition(view)
+        val childRect = childFrames[position]
+        
+        if (childRect != null) {
+            // Use actual rect bounds instead of assuming single-row height
+            val rectStart = if (orientation == Orientation.VERTICAL) childRect.top else childRect.left
+            val rectEnd = if (orientation == Orientation.VERTICAL) childRect.bottom else childRect.right
+            
+            if (rectStart < layoutStart) {
+                layoutStart = rectStart
+            }
+            
+            val newLayoutEnd = rectEnd
+            if (newLayoutEnd > layoutEnd) {
+                layoutEnd = newLayoutEnd
+            }
+        } else {
+            // Fallback for safety (should not occur in normal operation)
+            val childStart = getChildStart(view) + scroll + getPaddingStartForOrientation()
+            if (childStart < layoutStart) {
+                layoutStart = childStart
+            }
+            
+            val newLayoutEnd = childStart + rectsHelper.itemSize
+            if (newLayoutEnd > layoutEnd) {
+                layoutEnd = newLayoutEnd
+            }
         }
     }
 
@@ -849,23 +867,7 @@ open class RectsHelper(val layoutManager: SpannedGridLayoutManager,
      * Comparator to sort free rects by position, based on orientation
      */
     private val rectComparator = Comparator<Rect> { rect1, rect2 ->
-        when (orientation) {
-            SpannedGridLayoutManager.Orientation.VERTICAL -> {
-                if (rect1.top == rect2.top) {
-                    if (rect1.left < rect2.left) { -1 } else { 1 }
-                } else {
-                    if (rect1.top < rect2.top) { -1 } else { 1 }
-                }
-            }
-            SpannedGridLayoutManager.Orientation.HORIZONTAL -> {
-                if (rect1.left == rect2.left) {
-                    if (rect1.top < rect2.top) { -1 } else { 1 }
-                } else {
-                    if (rect1.left < rect2.left) { -1 } else { 1 }
-                }
-            }
-        }
-
+        compareRectsByOrientation(rect1, rect2)
     }
 
     val rows = mutableMapOf<Int, Set<Int>>()
@@ -973,6 +975,39 @@ open class RectsHelper(val layoutManager: SpannedGridLayoutManager,
         return rows[rowPosition] ?: emptySet()
     }
 
+    //==============================================================================================
+    //  ~ Private Methods
+    //==============================================================================================
+
+    /**
+     * Compare two rects based on orientation for sorting purposes.
+     *
+     * For vertical orientation: sorts by top position, then by left position.
+     * For horizontal orientation: sorts by left position, then by top position.
+     *
+     * @param rect1 First rect to compare
+     * @param rect2 Second rect to compare
+     * @return Negative if rect1 < rect2, positive if rect1 > rect2, zero if equal
+     */
+    private fun compareRectsByOrientation(rect1: Rect, rect2: Rect): Int {
+        return when (orientation) {
+            SpannedGridLayoutManager.Orientation.VERTICAL -> {
+                if (rect1.top == rect2.top) {
+                    rect1.left.compareTo(rect2.left)
+                } else {
+                    rect1.top.compareTo(rect2.top)
+                }
+            }
+            SpannedGridLayoutManager.Orientation.HORIZONTAL -> {
+                if (rect1.left == rect2.left) {
+                    rect1.top.compareTo(rect2.top)
+                } else {
+                    rect1.left.compareTo(rect2.left)
+                }
+            }
+        }
+    }
+
     /**
      * Remove this rect from the [freeRects], merge and reorder new free rects
      */
@@ -1021,6 +1056,9 @@ open class RectsHelper(val layoutManager: SpannedGridLayoutManager,
 }
 
 /**
- * Helper to store width and height spans
+ * Data class representing the width and height spans of an item in the grid.
+ *
+ * @param width The span width of the item
+ * @param height The span height of the item
  */
-class SpanSize(val width: Int, val height: Int)
+data class SpanSize(val width: Int, val height: Int)
