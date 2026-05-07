@@ -212,7 +212,11 @@ open class SpannedGridLayoutManager(val orientation: Orientation,
         val start = System.currentTimeMillis()
 
         for (i in 0 until state.itemCount) {
-            val spanSize = spanSizeLookup?.getSpanSize(i) ?: SpanSize(1, 1)
+            val rawSpanSize = spanSizeLookup?.getSpanSize(i) ?: SpanSize(1, 1)
+
+            // IMPORTANTE: normalizar altura -1 antes de pasar a RectsHelper
+            val spanSize = resolveSpanSizeForPosition(i, rawSpanSize, recycler)
+
             val childRect = rectsHelper.findRect(i, spanSize)
             rectsHelper.pushRect(i, childRect)
         }
@@ -260,72 +264,43 @@ open class SpannedGridLayoutManager(val orientation: Orientation,
      * Measure child view using [RectsHelper]
      */
     protected open fun measureChild(position: Int, view: View) {
-      val freeRectsHelper = this.rectsHelper
-      val itemWidth = freeRectsHelper.itemSize
-      val itemHeight = freeRectsHelper.itemSize
-  
-      val originalSpanSize = spanSizeLookup?.getSpanSize(position) ?: SpanSize(1, 1)
-  
-      // Copia mutable para poder ajustar la altura cuando sea -1
-      var spanSize = originalSpanSize
-  
-      // Primero calculamos los insets de decoración (no dependen del rect)
-      val insetsRect = Rect()
-      calculateItemDecorationsForChild(view, insetsRect)
-  
-      // Si la altura es -1, medimos el hijo con wrap_content y calculamos cuántos spans necesita
-      if (spanSize.height == -1) {
-          // Ancho en px según los spans horizontales
-          val childWidthPx = spanSize.width * itemWidth - insetsRect.left - insetsRect.right
-  
-          val lp = view.layoutParams as RecyclerView.LayoutParams
-  
-          val widthSpec = View.MeasureSpec.makeMeasureSpec(childWidthPx, View.MeasureSpec.EXACTLY)
-          val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-  
-          // Medimos una primera vez para obtener la altura "natural"
-          view.measure(widthSpec, heightSpec)
-  
-          val measuredHeightWithDecor = view.measuredHeight + insetsRect.top + insetsRect.bottom
-  
-          // Convertimos esa altura a número de spans verticales
-          val neededSpansHeight = kotlin.math.max(
-              1,
-              kotlin.math.ceil(measuredHeightWithDecor.toFloat() / itemHeight.toFloat()).toInt()
-          )
-  
-          // Creamos un SpanSize efectivo con altura en spans ya calculada
-          spanSize = SpanSize(spanSize.width, neededSpansHeight)
-      }
-  
-      // Validación usando el spanSize ya definitivo
-      val usedSpan = if (orientation == Orientation.HORIZONTAL) spanSize.height else spanSize.width
-      if (usedSpan > this.spans || usedSpan < 1) {
-          throw InvalidSpanSizeException(
-              errorSize = usedSpan,
-              maxSpanSize = spans
-          )
-      }
-  
-      // A partir de aquí, igual que el código original pero usando spanSize (ya ajustado)
-      val rect = freeRectsHelper.findRect(position, spanSize)
-  
-      val left = rect.left * itemWidth
-      val right = rect.right * itemWidth
-      val top = rect.top * itemHeight
-      val bottom = rect.bottom * itemHeight
-  
-      val width = right - left - insetsRect.left - insetsRect.right
-      val height = bottom - top - insetsRect.top - insetsRect.bottom
-  
-      val layoutParams = view.layoutParams as RecyclerView.LayoutParams
-      layoutParams.width = width
-      layoutParams.height = height
-  
-      measureChildWithMargins(view, width, height)
-  
-      childFrames[position] = Rect(left, top, right, bottom)
-  }
+
+        val freeRectsHelper = this.rectsHelper
+
+        val itemWidth = freeRectsHelper.itemSize
+        val itemHeight = freeRectsHelper.itemSize
+
+        val spanSize = spanSizeLookup?.getSpanSize(position) ?: SpanSize(1, 1)
+
+        val usedSpan = if (orientation == Orientation.HORIZONTAL) spanSize.height else spanSize.width
+
+        if (usedSpan > this.spans || usedSpan < 1) {
+            throw InvalidSpanSizeException(errorSize = usedSpan, maxSpanSize = spans)
+        }
+
+        // This rect contains just the row and column number - i.e.: [0, 0, 1, 1]
+        val rect = freeRectsHelper.findRect(position, spanSize)
+
+        // Multiply the rect for item width and height to get positions
+        val left = rect.left * itemWidth
+        val right = rect.right * itemWidth
+        val top = rect.top * itemHeight
+        val bottom = rect.bottom * itemHeight
+
+        val insetsRect = Rect()
+        calculateItemDecorationsForChild(view, insetsRect)
+
+        // Measure child
+        val width = right - left - insetsRect.left - insetsRect.right
+        val height = bottom - top - insetsRect.top - insetsRect.bottom
+        val layoutParams = view.layoutParams
+        layoutParams.width = width
+        layoutParams.height = height
+        measureChildWithMargins(view, width, height)
+
+        // Cache rect
+        childFrames[position] = Rect(left, top, right, bottom)
+    }
 
     /**
      * Layout child once it's measured and its position cached
@@ -472,6 +447,50 @@ open class SpannedGridLayoutManager(val orientation: Orientation,
         } else if (direction == Direction.START) { // Removed from end
             layoutEnd = getPaddingStartForOrientation() + childStart
         }
+    }
+
+    /**
+     * Calcula un SpanSize "real" cuando la altura viene como -1.
+     */
+    private fun resolveSpanSizeForPosition(
+        position: Int,
+        spanSize: SpanSize,
+        recycler: RecyclerView.Recycler
+    ): SpanSize {
+        if (spanSize.height != -1 || orientation != Orientation.VERTICAL) {
+            return spanSize
+        }
+
+        val freeRectsHelper = this.rectsHelper
+        val itemWidth = freeRectsHelper.itemSize
+        val itemHeight = freeRectsHelper.itemSize
+
+        val view = recycler.getViewForPosition(position)
+
+        val insetsRect = Rect()
+        calculateItemDecorationsForChild(view, insetsRect)
+
+        val childWidthPx = spanSize.width * itemWidth - insetsRect.left - insetsRect.right
+
+        val widthSpec = View.MeasureSpec.makeMeasureSpec(childWidthPx, View.MeasureSpec.EXACTLY)
+        val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+
+        // Medimos con altura wrap_content
+        view.measure(widthSpec, heightSpec)
+
+        val measuredHeightWithDecor =
+            view.measuredHeight + insetsRect.top + insetsRect.bottom
+
+        val neededSpansHeight = kotlin.math.max(
+            1,
+            kotlin.math.ceil(
+                measuredHeightWithDecor.toFloat() / itemHeight.toFloat()
+            ).toInt()
+        )
+
+        recycler.recycleView(view)
+
+        return SpanSize(spanSize.width, neededSpansHeight)
     }
 
     //==============================================================================================
