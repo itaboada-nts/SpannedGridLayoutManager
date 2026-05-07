@@ -1,6 +1,7 @@
 package com.arasthel.spannedgridlayoutmanager.sample
 
 import android.os.Bundle
+import android.os.PersistableBundle
 import android.support.v7.widget.RecyclerView
 import com.arasthel.spannedgridlayoutmanager.SpanSize
 import com.arasthel.spannedgridlayoutmanager.SpannedGridLayoutManager
@@ -44,8 +45,8 @@ class MainActivity: android.support.v7.app.AppCompatActivity() {
         recyclerview.adapter = adapter
     }
 
-    override fun onSaveInstanceState(outState: Bundle?) {
-        super.onSaveInstanceState(outState)
+    override fun onSaveInstanceState(outState: Bundle, p1: PersistableBundle) {
+        super.onSaveInstanceState(outState, p1)
 
         outState?.putBooleanArray("clicked", (recyclerview.adapter as GridItemAdapter).clickedItems.toBooleanArray())
 

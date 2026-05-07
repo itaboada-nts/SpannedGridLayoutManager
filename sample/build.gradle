@@ -3,12 +3,23 @@ apply plugin: 'kotlin-android'
 
 
 android {
-    compileSdkVersion 28
+    namespace "com.arasthel.spannedgridlayoutmanager.sample"
+    compileSdkVersion 30
     buildToolsVersion buildtools_version
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
     defaultConfig {
         applicationId "com.arasthel.spannedgridlayoutmanager.sample"
         minSdkVersion 14
-        targetSdkVersion 28
+        targetSdkVersion 30
         versionCode 1
         versionName "1.0"
     }

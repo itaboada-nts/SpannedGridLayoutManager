@@ -34,7 +34,7 @@ ext {
     siteUrl = 'https://github.com/Arasthel/SpannedGridLayoutManager'
     gitUrl = 'https://github.com/Arasthel/SpannedGridLayoutManager.git'
 
-    libraryVersion = '3.0.2.2'
+    libraryVersion = '3.0.2.3'
 
     developerId = 'Arasthel'
     developerName = 'Jorge Martín Epsinosa'
@@ -46,12 +46,22 @@ ext {
 }
 
 android {
-    compileSdkVersion 28
+    namespace "com.arasthel.spannedgridlayoutmanager"
+    compileSdkVersion 30
     buildToolsVersion buildtools_version
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
 
     defaultConfig {
         minSdkVersion 14
-        targetSdkVersion 28
+        targetSdkVersion 30
         versionCode 1
         versionName libraryVersion
     }
