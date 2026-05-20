@@ -430,35 +430,40 @@ open class SpannedGridLayoutManager(val orientation: Orientation,
             }
         }
 
+        if (toDetach.isEmpty()) return
+
+        // Capture the minimum absolute start position of all recycled items BEFORE removing them.
+        // (equivalent to what the original updateEdgesWithRemovedChild computed for layoutEnd)
+        var minRemovedStart = Int.MAX_VALUE
+        for (child in toDetach) {
+            val absoluteStart = getChildStart(child) + scroll  // = frame.top for VERTICAL
+            if (absoluteStart < minRemovedStart) minRemovedStart = absoluteStart
+        }
+
         for (child in toDetach) {
             removeAndRecycleView(child, recycler)
         }
 
-        // Recalculate layoutEnd from remaining children.
-        // We cannot use updateEdgesWithRemovedChild here because in a multi-span grid,
-        // a short item (e.g. 6-span wide) can be recycled while a taller item
-        // (e.g. 12-span wide) that extends much further down is still in the layout.
-        // Setting layoutEnd = recycledItem.top would corrupt the true layout boundary.
-        if (toDetach.isNotEmpty()) {
-            recalculateLayoutEnd()
-        }
-    }
-
-    /**
-     * Recalculate [layoutEnd] from all currently attached children.
-     * This is necessary after recycling from the end because a recycled short item
-     * could otherwise overwrite a larger [layoutEnd] set by a taller item still in layout.
-     */
-    protected open fun recalculateLayoutEnd() {
-        var maxEnd = getPaddingStartForOrientation()
-        for (i in 0 until childCount) {
+        // layoutEnd must be the maximum of:
+        // 1. The minimum top of recycled items — tells us content exists at that position,
+        //    so the scroll limit must reach at least there.
+        // 2. The maximum bottom of remaining children — handles the case where a tall item
+        //    (e.g. a 12-span wide card spanning many rows) is still in the layout and extends
+        //    further down than the recycled short items (e.g. 6-span wide cards).
+        //
+        // Without this, recycling a short right-column card would corrupt layoutEnd to that
+        // card's top, even though a taller left-column card still in the layout extends further.
+        var remainingMax = getPaddingStartForOrientation()
+        for (i in 0 until this.childCount) {
             val child = getChildAt(i) ?: continue
             val position = getPosition(child)
             val frame = childFrames[position] ?: continue
             val rectEnd = if (orientation == Orientation.VERTICAL) frame.bottom else frame.right
-            if (rectEnd > maxEnd) maxEnd = rectEnd
+            if (rectEnd > remainingMax) remainingMax = rectEnd
         }
-        layoutEnd = maxEnd
+
+        val fromRecycled = getPaddingStartForOrientation() + minRemovedStart
+        layoutEnd = maxOf(remainingMax, fromRecycled)
     }
 
     /**
