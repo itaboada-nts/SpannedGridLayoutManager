@@ -432,8 +432,33 @@ open class SpannedGridLayoutManager(val orientation: Orientation,
 
         for (child in toDetach) {
             removeAndRecycleView(child, recycler)
-            updateEdgesWithRemovedChild(child, direction)
         }
+
+        // Recalculate layoutEnd from remaining children.
+        // We cannot use updateEdgesWithRemovedChild here because in a multi-span grid,
+        // a short item (e.g. 6-span wide) can be recycled while a taller item
+        // (e.g. 12-span wide) that extends much further down is still in the layout.
+        // Setting layoutEnd = recycledItem.top would corrupt the true layout boundary.
+        if (toDetach.isNotEmpty()) {
+            recalculateLayoutEnd()
+        }
+    }
+
+    /**
+     * Recalculate [layoutEnd] from all currently attached children.
+     * This is necessary after recycling from the end because a recycled short item
+     * could otherwise overwrite a larger [layoutEnd] set by a taller item still in layout.
+     */
+    protected open fun recalculateLayoutEnd() {
+        var maxEnd = getPaddingStartForOrientation()
+        for (i in 0 until childCount) {
+            val child = getChildAt(i) ?: continue
+            val position = getPosition(child)
+            val frame = childFrames[position] ?: continue
+            val rectEnd = if (orientation == Orientation.VERTICAL) frame.bottom else frame.right
+            if (rectEnd > maxEnd) maxEnd = rectEnd
+        }
+        layoutEnd = maxEnd
     }
 
     /**
