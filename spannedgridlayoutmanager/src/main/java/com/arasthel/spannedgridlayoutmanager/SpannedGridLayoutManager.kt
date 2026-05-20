@@ -86,6 +86,12 @@ open class SpannedGridLayoutManager(val orientation: Orientation,
     protected var layoutEnd = 0
 
     /**
+     * The highest [layoutEnd] value ever observed since the last full layout pass.
+     * Used as a scroll floor so that recycling short items cannot corrupt the scroll limit.
+     */
+    protected var maxLayoutEnd = 0
+
+    /**
      * Total length of the layout depending on current orientation
      */
     val size: Int get() = if (orientation == Orientation.VERTICAL) height else width
@@ -197,6 +203,7 @@ open class SpannedGridLayoutManager(val orientation: Orientation,
         layoutStart = getPaddingStartForOrientation()
 
         layoutEnd = layoutStart
+        maxLayoutEnd = layoutStart
 
         // Clear cache, since layout may change
         childFrames.clear()
@@ -240,7 +247,7 @@ open class SpannedGridLayoutManager(val orientation: Orientation,
         recycleChildrenOutOfBounds(Direction.END, recycler)
 
         // Check if after changes in layout we aren't out of its bounds
-        val overScroll = scroll + size - layoutEnd - getPaddingEndForOrientation()
+        val overScroll = scroll + size - maxOf(layoutEnd, maxLayoutEnd) - getPaddingEndForOrientation()
         val isLastItemInScreen = (0 until childCount).map { getPosition(getChildAt(it)!!) }.contains(itemCount - 1)
         val allItemsInScreen = itemCount == 0 || (firstVisiblePosition == 0 && isLastItemInScreen)
         if (!allItemsInScreen && overScroll > 0) {
@@ -369,6 +376,7 @@ open class SpannedGridLayoutManager(val orientation: Orientation,
 
             if (rectEnd > layoutEnd) {
                 layoutEnd = rectEnd
+                if (layoutEnd > maxLayoutEnd) maxLayoutEnd = layoutEnd
             }
         }
     }
@@ -583,7 +591,7 @@ open class SpannedGridLayoutManager(val orientation: Orientation,
                 delta < 0
 
         val canScrollForward = (firstVisiblePosition + childCount) <= state.itemCount &&
-                (scroll + size) < (layoutEnd + rectsHelper.itemSize + getPaddingEndForOrientation())
+                (scroll + size) < (maxOf(layoutEnd, maxLayoutEnd) + rectsHelper.itemSize + getPaddingEndForOrientation())
                 delta > 0
 
         // If can't scroll forward or backwards, return
@@ -609,7 +617,7 @@ open class SpannedGridLayoutManager(val orientation: Orientation,
         val paddingEndLayout = getPaddingEndForOrientation()
 
         val start = 0
-        val end = layoutEnd + rectsHelper.itemSize + paddingEndLayout
+        val end = maxOf(layoutEnd, maxLayoutEnd) + rectsHelper.itemSize + paddingEndLayout
 
         scroll -= distance
 
