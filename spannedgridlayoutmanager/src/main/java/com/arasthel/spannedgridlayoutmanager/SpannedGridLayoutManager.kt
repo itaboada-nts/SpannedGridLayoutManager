@@ -214,12 +214,6 @@ open class SpannedGridLayoutManager(val orientation: Orientation,
 
             val childRect = rectsHelper.findRect(i, spanSize)
             rectsHelper.pushRect(i, childRect)
-            
-            // Update layoutEnd as we go through all items
-            val rectEnd = if (orientation == Orientation.VERTICAL) childRect.bottom else childRect.right
-            if (rectEnd > layoutEnd) {
-                layoutEnd = rectEnd * rectsHelper.itemSize
-            }
         }
 
         if (DEBUG) {
@@ -363,21 +357,18 @@ open class SpannedGridLayoutManager(val orientation: Orientation,
     protected open fun updateEdgesWithNewChild(view: View) {
         val position = getPosition(view)
         val childRect = childFrames[position]
-        
+
         if (childRect != null) {
-            // Convert grid coordinates to pixel coordinates
+            // childFrames stores pixel coordinates directly
             val rectStart = if (orientation == Orientation.VERTICAL) childRect.top else childRect.left
             val rectEnd = if (orientation == Orientation.VERTICAL) childRect.bottom else childRect.right
-            
-            val pixelStart = rectStart * rectsHelper.itemSize
-            val pixelEnd = rectEnd * rectsHelper.itemSize
-            
-            if (pixelStart < layoutStart) {
-                layoutStart = pixelStart
+
+            if (rectStart < layoutStart) {
+                layoutStart = rectStart
             }
-            
-            if (pixelEnd > layoutEnd) {
-                layoutEnd = pixelEnd
+
+            if (rectEnd > layoutEnd) {
+                layoutEnd = rectEnd
             }
         }
     }
@@ -457,31 +448,6 @@ open class SpannedGridLayoutManager(val orientation: Orientation,
         } else if (direction == Direction.START) { // Removed from end
             layoutEnd = getPaddingStartForOrientation() + childStart
         }
-    }
-    
-    /**
-     * Recalculate layoutEnd based on actual visible children and their positions.
-     * This accounts for dynamic heights that may differ from the grid calculation.
-     */
-    protected open fun updateLayoutEndFromVisibleChildren() {
-        if (childCount == 0) return
-        
-        var maxEnd = layoutEnd
-        for (i in 0 until childCount) {
-            val child = getChildAt(i)
-            if (child != null) {
-                val position = getPosition(child)
-                val childRect = childFrames[position]
-                if (childRect != null) {
-                    val rectEnd = if (orientation == Orientation.VERTICAL) childRect.bottom else childRect.right
-                    val pixelEnd = rectEnd * rectsHelper.itemSize
-                    if (pixelEnd > maxEnd) {
-                        maxEnd = pixelEnd
-                    }
-                }
-            }
-        }
-        layoutEnd = maxEnd
     }
 
     /**
@@ -703,9 +669,14 @@ open class SpannedGridLayoutManager(val orientation: Orientation,
     protected open fun fillAfter(recycler: RecyclerView.Recycler) {
         val visibleEnd = scroll + size
 
-        val lastVisibleRow = (visibleEnd + rectsHelper.itemSize - 1) / rectsHelper.itemSize
+        // Start from the first currently visible row instead of layoutEnd/itemSize.
+        // Using layoutEnd caused a bug: when a tall item (spanning multiple rows) was
+        // added, its pixel bottom pushed layoutEnd far ahead, making lastAddedRow skip
+        // rows where shorter items in adjacent columns hadn't been added yet.
+        val firstVisibleRow = maxOf(0, scroll / rectsHelper.itemSize)
+        val lastVisibleRow = visibleEnd / rectsHelper.itemSize
 
-        for (rowIndex in 0 .. lastVisibleRow) {
+        for (rowIndex in firstVisibleRow .. lastVisibleRow) {
             val row = rectsHelper.rows[rowIndex] ?: continue
 
             for (itemIndex in row) {
@@ -714,9 +685,6 @@ open class SpannedGridLayoutManager(val orientation: Orientation,
                 makeAndAddView(itemIndex, Direction.END, recycler)
             }
         }
-        
-        // Update layoutEnd based on actual child positions to account for dynamic heights
-        updateLayoutEndFromVisibleChildren()
     }
 
     //==============================================================================================
